@@ -4,21 +4,16 @@ import ssh2 from "ssh2";
 import { generateKeyPairSync, createHash } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
 import { servers } from "../src/schema.js";
 import { encrypt } from "../src/crypto.js";
 import { monitor, ssh } from "../src/monitor.js";
+import { migrationNames, readMigration } from "../src/migrations.js";
 import type { Database } from "../src/db.js";
 
 test("monitor deduplicates refresh and preserves last good metrics on failure", async () => {
   const pg = new PGlite();
-  await pg.exec(
-    await readFile(
-      new URL("../migrations/001_initial.sql", import.meta.url),
-      "utf8",
-    ),
-  );
+  for (const name of migrationNames) await pg.exec(await readMigration(name));
   const db = drizzle(pg) as unknown as Database;
   const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
     .privateKey.export({ type: "pkcs1", format: "pem" })

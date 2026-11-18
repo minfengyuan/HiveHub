@@ -920,6 +920,7 @@ function Servers() {
             <p className="muted">
               {s.username}@{s.host}:{s.port}
             </p>
+            <p className="muted">到期日期：{s.expiresOn ?? "未设置"}</p>
             {s.group && <span className="badge">{s.group}</span>}
             <div className="tags">
               {s.tags.map((t) => (
@@ -1037,6 +1038,7 @@ function Servers() {
                   {
                     ...data,
                     port: Number(f.get("port")),
+                    expiresOn: f.get("expiresOn") || null,
                     tags: String(f.get("tags"))
                       .split(",")
                       .map((s) => s.trim())
@@ -1092,6 +1094,15 @@ function Servers() {
             </Field>
             <Field label="标签（英文逗号分隔）">
               <input name="tags" defaultValue={editing?.tags.join(", ")} />
+            </Field>
+            <Field label="到期日期">
+              <input
+                name="expiresOn"
+                type="date"
+                min="0001-01-01"
+                max="9999-12-31"
+                defaultValue={editing?.expiresOn ?? ""}
+              />
             </Field>
             <Field label="备注">
               <textarea name="notes" defaultValue={editing?.notes} />
@@ -1149,9 +1160,7 @@ function App() {
       <aside>
         <NavLink className="brand" to="/">
           <Layers size={27} />
-          <span>
-            HiveHub<small>个人事务中心</small>
-          </span>
+          <span>HiveHub</span>
         </NavLink>
         <nav>
           {[

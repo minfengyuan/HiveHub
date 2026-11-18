@@ -1,18 +1,13 @@
 // Disposable browser-test backend. Never used by the production entrypoint.
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { readFile } from "node:fs/promises";
 import { hash } from "argon2";
 import { buildApp } from "../src/app.js";
+import { migrationNames, readMigration } from "../src/migrations.js";
 import { admins } from "../src/schema.js";
 import type { Database } from "../src/db.js";
 const pg = new PGlite();
-await pg.exec(
-  await readFile(
-    new URL("../migrations/001_initial.sql", import.meta.url),
-    "utf8",
-  ),
-);
+for (const name of migrationNames) await pg.exec(await readMigration(name));
 const db = drizzle(pg) as unknown as Database;
 await db
   .insert(admins)

@@ -4,6 +4,7 @@ import {
   text,
   boolean,
   timestamp,
+  date,
   integer,
   jsonb,
 } from "drizzle-orm/pg-core";
@@ -64,6 +65,7 @@ export const servers = pgTable("servers", {
   tags: jsonb("tags").$type<string[]>().default([]).notNull(),
   notes: text("notes").default("").notNull(),
   fingerprint: text("fingerprint"),
+  expiresOn: date("expires_on", { mode: "string" }),
   metrics: jsonb("metrics").$type<Metrics>(),
   lastSuccess: timestamp("last_success", { withTimezone: true }),
   lastAttempt: timestamp("last_attempt", { withTimezone: true }),

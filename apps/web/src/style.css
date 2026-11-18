@@ -117,14 +117,6 @@ aside {
   font-family: Georgia, serif;
   font-size: 25px;
 }
-.brand small {
-  display: block;
-  font:
-    11px -apple-system,
-    sans-serif;
-  color: #8b8479;
-  margin-top: 4px;
-}
 nav {
   display: flex;
   flex-direction: column;
@@ -618,9 +610,6 @@ progress::-webkit-progress-value {
   .brand {
     padding: 0 0 15px;
     font-size: 22px;
-  }
-  .brand small {
-    display: none;
   }
   nav {
     flex-direction: row;

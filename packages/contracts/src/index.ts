@@ -49,6 +49,14 @@ export const Server = Type.Object(
     group: Type.Optional(text()),
     tags: Type.Optional(Type.Array(text(60), { maxItems: 30 })),
     notes: Type.Optional(text(20000)),
+    expiresOn: Type.Optional(
+      Type.Unsafe<string | null>({
+        type: "string",
+        nullable: true,
+        format: "date",
+        pattern: "^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -67,6 +75,7 @@ export interface ServerRecord {
   group: string;
   tags: string[];
   notes: string;
+  expiresOn: string | null;
   fingerprint: string | null;
   hasPrivateKey: boolean;
   metrics: Metrics | null;

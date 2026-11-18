@@ -1,26 +1,19 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { sql as query } from "drizzle-orm";
-import { readFile } from "node:fs/promises";
+import { eq, sql as query } from "drizzle-orm";
 import type { Database } from "../src/db.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hash } from "argon2";
 import { connect } from "../src/db.js";
 import { buildApp } from "../src/app.js";
-import { admins } from "../src/schema.js";
+import { migrationNames, readMigration } from "../src/migrations.js";
+import { admins, servers } from "../src/schema.js";
 const url = process.env.TEST_DATABASE_URL;
 test("authenticated CRUD, validation, inbox migration, categories and secret redaction", async () => {
   const pg = url ? null : new PGlite();
   const connection = url ? connect(url) : null;
   const db = connection?.db ?? (drizzle(pg!) as unknown as Database);
-  if (pg)
-    await pg.exec(
-      await readFile(
-        new URL("../migrations/001_initial.sql", import.meta.url),
-        "utf8",
-      ),
-    );
   const { app } = await buildApp(db, {
     databaseUrl: url!,
     masterKey: "ab".repeat(32),
@@ -29,6 +22,19 @@ test("authenticated CRUD, validation, inbox migration, categories and secret red
     port: 3000,
   });
   try {
+    if (pg) {
+      const [initial, ...remaining] = migrationNames;
+      await pg.exec(await readMigration(initial));
+      await pg.exec(`
+        INSERT INTO servers (name, host, username, secret, notes)
+        VALUES ('legacy', 'localhost', 'test', 'legacy-secret', 'legacy notes')
+      `);
+      for (const name of remaining) await pg.exec(await readMigration(name));
+      const [legacy] = await db.select().from(servers);
+      assert.equal(legacy?.expiresOn, null);
+      assert.equal(legacy?.notes, "legacy notes");
+      assert.equal(legacy?.secret, "legacy-secret");
+    }
     await db.execute(
       query`TRUNCATE admins, task_lists, tasks, prompts, prompt_categories, servers CASCADE`,
     );
@@ -136,16 +142,22 @@ test("authenticated CRUD, validation, inbox migration, categories and secret red
       ).statusCode,
       400,
     );
-    const server = await req("servers", "POST", {
+    const serverInput = {
       name: "test",
       host: "localhost",
       username: "test",
+    };
+    const server = await req("servers", "POST", {
+      ...serverInput,
       privateKey: "test-private-key",
+      expiresOn: "2028-02-29",
     });
     assert.equal(server.statusCode, 201);
     assert(!server.body.includes("test-private-key"));
     assert(!server.body.includes('"secret"'));
     const saved = server.json();
+    assert.equal(saved.expiresOn, "2028-02-29");
+    assert.equal((await req("servers")).json()[0].expiresOn, "2028-02-29");
     assert.equal(
       (await req("servers/" + saved.id + "/refresh", "POST")).json().status,
       "unverified",
@@ -158,6 +170,49 @@ test("authenticated CRUD, validation, inbox migration, categories and secret red
       ).statusCode,
       400,
     );
+    const serverPath = "servers/" + saved.id;
+    const whereServer = eq(servers.id, saved.id);
+    const fingerprint = "fixture-fingerprint";
+    await db.update(servers).set({ fingerprint }).where(whereServer);
+    const [before] = await db.select().from(servers).where(whereServer);
+    assert.equal(
+      (await req(serverPath, "PUT", serverInput)).json().expiresOn,
+      "2028-02-29",
+    );
+    for (const expiresOn of [
+      "2027-02-29",
+      "0000-01-01",
+      "",
+      "2027-04-30T00:00:00Z",
+    ]) {
+      assert.equal(
+        (await req(serverPath, "PUT", { ...serverInput, expiresOn })).statusCode,
+        400,
+      );
+    }
+    assert.equal((await req("servers")).json()[0].expiresOn, "2028-02-29");
+    const updated = await req(serverPath, "PUT", {
+      ...serverInput,
+      expiresOn: "2020-03-01",
+    });
+    assert.equal(updated.statusCode, 200);
+    assert.equal(updated.json().expiresOn, "2020-03-01");
+    assert.equal(updated.json().fingerprint, fingerprint);
+    const [after] = await db.select().from(servers).where(whereServer);
+    assert.equal(after?.secret, before?.secret);
+    const cleared = await req(serverPath, "PUT", {
+      ...serverInput,
+      expiresOn: null,
+    });
+    assert.equal(cleared.statusCode, 200);
+    assert.equal(cleared.json().expiresOn, null);
+    assert.equal((await req("servers")).json()[0].expiresOn, null);
+    const withoutDate = await req("servers", "POST", {
+      ...serverInput,
+      privateKey: "test-private-key",
+    });
+    assert.equal(withoutDate.statusCode, 201);
+    assert.equal(withoutDate.json().expiresOn, null);
     assert.equal((await req("docs/json")).statusCode, 200);
     await req("auth/logout", "POST");
     assert.equal((await req("tasks")).statusCode, 401);
